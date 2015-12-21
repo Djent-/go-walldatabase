@@ -1,6 +1,6 @@
 package main
 
-# following along somewhat with https://golang.org/doc/articles/wiki/
+// following along somewhat with https://golang.org/doc/articles/wiki/
 
 import (
   "fmt"
