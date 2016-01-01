@@ -1,30 +1,78 @@
 package main
 
-// following along somewhat with https://golang.org/doc/articles/wiki/
-
 import (
   "fmt"
-  "io/ioutil"
-  "net/http"
-  "database/sql"
+  //"io/ioutil"
+  // https://golang.org/pkg/flag/
+  "flag"
+  // https://godoc.org/github.com/mattn/go-sqlite3
   _ "github.com/mattn/go-sqlite3"
+  "errors"
+  "strings"
 )
 
-func main() {
-  
+// Command flag vars
+/*
+help
+version
+add
+edit
+get
+dbfile
+createdb
+wallpaperdir
+test
+random
+*/
+
+var helpf = flag.Bool("help", false, "Display help message")
+var versionf = flag.Bool("version", false, "Display version number")
+var addf userDefinition
+var editf userDefinition
+var getf = flag.String("get", "", "Get list of filenames corresponding to tag")
+var dbfilef = flag.String("dbfile", "go-walls.db", "Path of database file")
+var createdbf = flag.Bool("createdb", false, "Create database file")
+var wallpaperdirf = flag.String("wallpaperdir", "", "Path to wallpapers")
+var randomf = flag.String("random", "", "Returns random wallpaper with given tag")
+
+// add and edit struct
+type tagList []string
+
+// Could use a better name
+type userDefinition struct {
+	wallpaperfilename string
+	tags tagList
 }
 
-/*
-Basic flow:
-  User starts program
-  Program hosts web server on :8080
-  Serve HTML page displaying current wallpaper image and checkbox list of tags
-    also a text form for new tags
-    For wallpapers which are already tagged, some checkboxes should default to true
-    Bonus points for not using javascript
-  User selects tags
-  Tags are POSTed back to web server listener
-  Filename, tags are added to database
-  Web server starts serving next wallpaper image HTML
-  Web page auto-refreshes
-*/
+func (u *userDefinition) String() string {
+	// this is how String() is handled in the pkg/flag example
+	return fmt.Sprint(*u)
+}
+
+func (u *userDefinition) Set(value string) error {
+	// Handle the case of a user trying to double up add and edit, etc
+	if u.wallpaperfilename != "" {
+		return errors.New("userDefinition flag already set")
+	}
+	
+	counter := 0
+	for _, elem := range strings.Split(value, " ") {
+		// first element is the filename
+		if counter == 0 {
+			u.wallpaperfilename = elem 
+		} else { // all other elements are tags
+			u.tags = append(u.tags, elem)
+		}
+		counter++
+	}
+	return nil
+}
+
+func init() {
+	flag.Var(&addf, "add", "filename of wallpaper followed by 0+ tags")
+	flag.Var(&editf, "edit", "filename of wallpaper followed by new tags")
+}
+
+func main() {
+	flag.Parse()
+}
