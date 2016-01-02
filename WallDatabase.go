@@ -196,6 +196,9 @@ func getWallpapers(db *sql.DB) {
 		if err := rows.Scan(&filename); err != nil {
 			log.Fatal(err)
 		}
+		/* I should remove the single quotes from the printed line,
+		   but that would currently break compatibility with Wallpaper.pl
+		   because of the way the regex is implemented. */
 		fmt.Println(filename)
 	}
 	if err := rows.Err(); err != nil {
