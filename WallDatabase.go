@@ -198,6 +198,50 @@ func (w WallDatabase) Add(wp Wallpaper) error {
 	return nil
 }
 
+/*
+Debating whether this should take a filename string as an argument
+or a Wallpaper as an argument. You may not know the original filename
+if the user renamed a file - then trying to delete the nonexistant file
+from the database will be timeconsuming without the original filename.
+Likewise, constructing a Wallpaper just to pass to Remove() is also
+timeconsuming, except in that situation, it would be best to ReadWP()
+and then Remove() the returned Wallpaper.
+*/
+func (w WallDatabase) Remove(wp Wallpaper) error {
+	// Look up the Wallpaper's ID in Wallpaper table
+	var wallpaperID int
+	selectStmt := `
+	SELECT ID FROM Wallpaper WHERE md5 = ?
+	`
+	err := w.db.QueryRow(selectStmt, wp.md5).Scan(&wallpaperID)
+	if err != nil {
+		return errors.New("Wallpaper to be removed to does exist in database")
+	}
+	// Remove the wallpaper from the Wallpaper table
+	w.db.Exec("DELETE FROM Wallpaper WHERE md5 = ")
+	// Remove associations between the wallpaper to be removed and any tags
+	deleteStmt
+	// Remove tags whose only association was with the removed wallpaper
+	
+}
+
+/*
+Here I have the option of either deleting the old wallpaper completely
+from the database and then adding the new wallpaper, or going through
+both wallpapers and depending on any changes between the new and the old,
+update the SQLite database. I feel like the way I would implement the
+wallpaper struct diff function, it would not be any faster than deleting
+the old wallpaper completely and then adding a new one. But maybe not.
+I may write two functions to use both ways and then time them for
+various updates.
+*/
+func (w WallDatabase) Update(oldWallpaper, newWallpaper Wallpaper) error {
+	// Remove old wallpaper
+	
+	// Add new wallpaper
+	
+}
+
 func NewWP(filename string, tags []string) Wallpaper {
 	// check whether given filename exists
 	if ex, _ := exists(filename); !ex {
