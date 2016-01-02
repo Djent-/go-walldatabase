@@ -1,105 +1,40 @@
-package main
+package WallDatabase
 
 import (
   "fmt"
   "os"
-  //"io"
   "io/ioutil"
-  // https://golang.org/pkg/flag/
-  "flag"
   // https://godoc.org/github.com/mattn/go-sqlite3
   _ "github.com/mattn/go-sqlite3"
   "errors"
-  //"strings"
   "database/sql"
   "crypto/md5"
   "log"
 )
 
-// Command flag vars
+type Wallpaper struct {
+	ID int
+	filename string
+	md5 string
+	tags []string
+}
+
+type WallDatabase *sql.DB
+
+type Wallpapers []Wallpaper
+
 /*
-help
-version
-add
-edit
-get
-dbfile
-createdb
-wallpaperdir
-test
-random
+I don't think this is the best name for this function.
+It does return a new INSTANCE of the database, but it also
+creates an entirely new DATABASE if needed.
+Could possibly make both a New() and an Open()
 */
-
-var helpf = flag.Bool("help", false, "Display help message")
-var versionf = flag.Bool("version", false, "Display version number")
-var addf userDefinition
-var editf userDefinition
-var getf = flag.String("get", "", "Get list of filenames corresponding to tag")
-var dbfilef = flag.String("dbfile", "go-walls.db", "Path of database file")
-var createdbf = flag.Bool("createdb", false, "Create database file")
-var wallpaperdirf = flag.String("wallpaperdir", "", "Path to wallpapers")
-var randomf = flag.String("random", "", "Returns random wallpaper with given tag")
-
-// add and edit struct
-type tagList []string
-
-// Could use a better name
-type userDefinition struct {
-	wallpaperfilename string
-	tags tagList
-}
-
-func (u *userDefinition) String() string {
-	// this is how String() is handled in the pkg/flag example
-	return fmt.Sprint(*u)
-}
-
-func (u *userDefinition) Set(value string) error {
-	// Handle the case of a user trying to double up add and edit, etc
-	if u.wallpaperfilename != "" {
-		return errors.New("userDefinition flag already set")
+func New(dbfile string) WallDatabase {
+	if ex, _ := exists(*db); !ex {
+		createDatabase(dbfile)
 	}
 	
-	// The value that actually gets passed to the flag is the filename
-	u.wallpaperfilename = value
-	
-	/* The following is not idiomatic, and I consider it a shortcoming
-	   of the go flag package. flag lacks many features present in
-	   other command line libraries in other languages. */
-	// These are the trailing args
-	for _, elem := range flag.Args() {
-		u.tags = append(u.tags, elem)
-		log.Printf("Appended tag %s", elem)
-	}
-	return nil
-}
-
-func init() {
-	flag.Var(&addf, "add", "filename of wallpaper followed by 0+ tags")
-	flag.Var(&editf, "edit", "filename of wallpaper followed by new tags")
-}
-
-func main() {
-	flag.Parse()
-	dbh := useDatabase()
-	//dbh.Exec("DELETE FROM Wallpaper")
-	//dbh.Exec("DELETE FROM IsTagged")
-	switch {
-		case addf.wallpaperfilename != "":
-			addWallpaper(dbh)
-		case *getf != "":
-			getWallpapers(dbh)
-	}
-	
-}
-
-func useDatabase() (*sql.DB) {
-	// dbfilef defaults to go-walls.db
-	if ex, _ := exists(*dbfilef); !ex {
-		createDatabase()
-	}
-	
-	db, err := sql.Open("sqlite3", *dbfilef)
+	db, err := sql.Open("sqlite3", dbfile)
 	if err != nil {
 		panic(err)
 	}
@@ -107,10 +42,10 @@ func useDatabase() (*sql.DB) {
 	return db
 }
 
-func createDatabase() {
+func createDatabase(dbfile string) {
 	// I believe this creates the file on the disk
 	// as well as opening it
-	db, err := sql.Open("sqlite3", *dbfilef)
+	db, err := sql.Open("sqlite3", dbfile)
 	if err != nil {
 		panic(err)
 	}
@@ -177,7 +112,7 @@ func exists(path string) (bool, error) {
 	return true, err
 }
 
-func getWallpapers(db *sql.DB) {
+func WallDatabase getWallpapers(tag string) Wallpapers {
 	// Print to stdout all wallpapers corresponding to a tag line by line
 	getStmt := `
 	SELECT Wallpaper.filename
@@ -186,11 +121,12 @@ func getWallpapers(db *sql.DB) {
 		AND Tag.ID = IsTagged.tag
 		AND Tag.tag = ?
 	`
-	rows, err := db.Query(getStmt, getf)
+	rows, err := db.Query(getStmt, tag)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer rows.Close()
+	var returnedWallpapers Wallpapers
 	for rows.Next() {
 		var filename string
 		if err := rows.Scan(&filename); err != nil {
@@ -199,11 +135,12 @@ func getWallpapers(db *sql.DB) {
 		/* I should remove the single quotes from the printed line,
 		   but that would currently break compatibility with Wallpaper.pl
 		   because of the way the regex is implemented. */
-		fmt.Println(filename)
+		fmt.Append(returnedWallpapers, filename)
 	}
 	if err := rows.Err(); err != nil {
 		log.Fatal(err)
 	}
+	return returnedWallpapers
 }
 
 func addWallpaper(db *sql.DB) {
