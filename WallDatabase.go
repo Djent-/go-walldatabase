@@ -19,7 +19,10 @@ type Wallpaper struct {
 	tags []string
 }
 
-type WallDatabase *sql.DB
+type WallDatabase struct{
+	database *sql.DB
+	wallpapers Wallpapers
+}
 
 type Wallpapers []Wallpaper
 
