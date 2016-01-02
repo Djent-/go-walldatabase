@@ -10,7 +10,7 @@ import (
   // https://godoc.org/github.com/mattn/go-sqlite3
   _ "github.com/mattn/go-sqlite3"
   "errors"
-  "strings"
+  //"strings"
   "database/sql"
   "crypto/md5"
   "log"
@@ -60,15 +60,16 @@ func (u *userDefinition) Set(value string) error {
 		return errors.New("userDefinition flag already set")
 	}
 	
-	counter := 0
-	for _, elem := range strings.Split(value, " ") {
+	u.wallpaperfilename = value
+	
+	/* The following is not idiomatic, and I consider it a shortcoming
+	   of the go flag package. flag lacks many features present in
+	   other command line libraries in other languages. */
+	// These are the trailing args
+	for _, elem := range flag.Args() {
 		// first element is the filename
-		if counter == 0 {
-			u.wallpaperfilename = elem 
-		} else { // all other elements are tags
-			u.tags = append(u.tags, elem)
-		}
-		counter++
+		u.tags = append(u.tags, elem)
+		log.Printf("Appended tag %s", elem)
 	}
 	return nil
 }
@@ -186,7 +187,7 @@ func addWallpaper(db *sql.DB) {
 	if ex, _ := exists(addf.wallpaperfilename); !ex {
 		// check against wallpaperdirf as well
 		if ex, _ := exists(*wallpaperdirf + addf.wallpaperfilename); !ex {
-			panic("Cannot find wallpaper")
+			panic(fmt.Sprintf("Cannot find wallpaper: %s%s", *wallpaperdirf, addf.wallpaperfilename))
 		} else {
 			addf.wallpaperfilename = *wallpaperdirf + addf.wallpaperfilename
 		}
@@ -238,17 +239,15 @@ func addWallpaper(db *sql.DB) {
 		// check if tag exists in database
 		var tagID int
 		err := db.QueryRow("SELECT tag FROM Tag WHERE tag = ?", tag).Scan(&tagID)
-		switch {
-			case err == sql.ErrNoRows:
-				// tag not found
-				// add tag to Tag
-				// get Tag.ID of added tag
-				db.Exec("INSERT INTO Tag VALUES(NULL, ?)", tag)
-				db.QueryRow("SELECT ID FROM Tag WHERE tag = ?", tag).Scan(&tagID)
-			case err != nil:
-				log.Fatal(err)
-			default: 
-				break
+		if err == sql.ErrNoRows {
+			// tag not found
+			// add tag to Tag
+			// get Tag.ID of added tag
+			db.Exec("INSERT INTO Tag VALUES(NULL, ?)", tag)
+			db.QueryRow("SELECT ID FROM Tag WHERE tag = ?", tag).Scan(&tagID)
+			log.Printf("Created tag %s with ID %d", tag, tagID)
+		} else if err != nil {
+			log.Fatal(err)
 		}
 		db.Exec("INSERT INTO IsTagged VALUES(?, ?)", wallpaperID, tagID)
 		log.Printf("Tagged " + addf.wallpaperfilename + " as " + tag)
