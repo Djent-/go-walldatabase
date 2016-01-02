@@ -231,7 +231,7 @@ func addWallpaper(db *sql.DB) {
 	db.Exec("INSERT INTO Wallpaper VALUES(NULL, ?, ?)", addf.wallpaperfilename, md5hash)
 	var wallpaperID int
 	db.QueryRow("SELECT ID FROM Wallpaper WHERE md5 = ?", md5hash).Scan(&wallpaperID)
-	log.Printf("WallpaperID: " + string(wallpaperID))
+	log.Printf("WallpaperID: %d", wallpaperID)
 	
 	// Add tags to database
 	for _, tag := range(addf.tags) {
