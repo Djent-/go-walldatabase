@@ -10,16 +10,18 @@ import (
   "database/sql"
   "crypto/md5"
   "log"
+  "strings"
 )
 
 type Wallpaper struct {
-	ID int
 	filename string
 	md5 string
 	tags []string
 }
 
-type Walldatabase *sql.DB
+type WallDatabase struct {
+	db *sql.DB
+}
 
 /*
 type WallDatabase struct{
@@ -31,7 +33,7 @@ type WallDatabase struct{
 type Wallpapers []Wallpaper
 
 func OpenDB(dbfile string) WallDatabase {
-	if ex, _ := exists(*db); !ex {
+	if ex, _ := exists(dbfile); !ex {
 		NewDB(dbfile)
 	}
 	
@@ -40,7 +42,7 @@ func OpenDB(dbfile string) WallDatabase {
 		panic(err)
 	}
 	
-	return db
+	return WallDatabase{ db }
 }
 
 func NewDB(dbfile string) {
@@ -119,7 +121,7 @@ func (w WallDatabase) Get(tag string) Wallpapers {
 		AND Tag.ID = IsTagged.tag
 		AND Tag.tag = ?
 	`
-	rows, err := w.Query(getStmt, tag)
+	rows, err := w.db.Query(getStmt, tag)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -131,7 +133,9 @@ func (w WallDatabase) Get(tag string) Wallpapers {
 			log.Fatal(err)
 		}
 		// TODO: remove single quotes from around filename
-		returnedWallpapers = append(returnedWallpapers, filename)
+		wp, err := w.ReadWP(filename)
+		if err != nil { log.Fatal(err) }
+		returnedWallpapers = append(returnedWallpapers, wp)
 	}
 	if err := rows.Err(); err != nil {
 		log.Fatal(err)
@@ -158,71 +162,101 @@ func (w WallDatabase) Add(wp Wallpaper) error {
 		*/
 	var found string
 	//This line querys the database, setting found to the md5 hash
-	err = w.QueryRow("SELECT md5 FROM Wallpaper WHERE md5 = ?", wp.md5).Scan(&found)
+	err := w.db.QueryRow("SELECT md5 FROM Wallpaper WHERE md5 = ?", wp.md5).Scan(&found)
 	switch {
 		case err == sql.ErrNoRows:
 			break
 		case err != nil:
 			log.Fatal(err)
-		default:
-			return error.New("Wallpaper already tracked. Use Edit().")
+		case found != "":
+			return errors.New("Wallpaper already tracked. Use Edit().")
 	}
 	
 	// Add file to database
-	w.Exec("INSERT INTO Wallpaper VALUES(NULL, ?, ?)", wallpaper.filename, md5hash)
+	w.db.Exec("INSERT INTO Wallpaper VALUES(NULL, ?, ?)", wp.filename, wp.md5)
 	var wallpaperID int
-	w.QueryRow("SELECT ID FROM Wallpaper WHERE md5 = ?", md5hash).Scan(&wallpaperID)
+	w.db.QueryRow("SELECT ID FROM Wallpaper WHERE md5 = ?", wp.md5).Scan(&wallpaperID)
 	
 	// Add tags to database
 	for _, tag := range(wp.tags) {
 		// check if tag exists in database
 		var tagID int
-		err := w.QueryRow("SELECT ID FROM Tag WHERE tag = ?", tag).Scan(&tagID)
+		err := w.db.QueryRow("SELECT ID FROM Tag WHERE tag = ?", tag).Scan(&tagID)
 		if err == sql.ErrNoRows {
 			// tag not found
 			// add tag to Tag
 			// get Tag.ID of added tag
-			w.Exec("INSERT INTO Tag VALUES(NULL, ?)", tag)
-			w.QueryRow("SELECT ID FROM Tag WHERE tag = ?", tag).Scan(&tagID)
-			log.Printf("Created tag '%s' with ID %d", tag, tagID)
+			w.db.Exec("INSERT INTO Tag VALUES(NULL, ?)", tag)
+			w.db.QueryRow("SELECT ID FROM Tag WHERE tag = ?", tag).Scan(&tagID)
+			// log.Printf("Created tag '%s' with ID %d", tag, tagID)
 		} else if err != nil {
 			log.Fatal(err)
 		}
-		w.Exec("INSERT INTO IsTagged VALUES(?, ?)", wallpaperID, tagID)
-		log.Printf("Tagged %s as '%s'", wp.filename, tag)
+		w.db.Exec("INSERT INTO IsTagged VALUES(?, ?)", wallpaperID, tagID)
+		// log.Printf("Tagged %s as '%s'", wp.filename, tag)
 	}
 	return nil
 }
 
 func NewWP(filename string, tags []string) Wallpaper {
-	var wallpaper Wallpaper
-	wallpaper.Set(filename, tags)
-	return wallpaper
-}
-
-func (w Wallpaper) Set(filename string, tags []string) {
 	// check whether given filename exists
 	if ex, _ := exists(filename); !ex {
 		log.Fatal(fmt.Sprintf("Cannot find wallpaper: %s", filename))
 	}
-	w.filename = filename
-	w.tags = tags
 	
 	// MD5 hash it
-	// ioutil.ReadFile returns []byte
-	var filedata []byte
-	var err error
-	filedata, err = ioutil.ReadFile(wallpaper.filename)
+	// ioutil.ReadFile returns []byte, error
+	filedata, err := ioutil.ReadFile(filename)
 	if err != nil { panic(err) }
 	
 	// convert the md5 from [16]byte to string
 	md5hash := fmt.Sprintf("%x", md5.Sum(filedata))
-	w.md5 = md5hash
+	
+	return Wallpaper{ filename: filename, tags: tags, md5: md5hash}
 }
 
-func (w WallDatabase) ReadWP(filename string) Wallpaper {
+func (w Wallpaper) String() string {
+	return fmt.Sprintf("%s : %s", w.filename, strings.Join(w.tags, ", "))
+}
+
+func (w WallDatabase) ReadWP(filename string) (Wallpaper, error) {
 	// Go into the Wallpaper table and SELECT *
 	// Go into the IsTagged table and get the Tag IDs associated
 	// Go into the Tag table and get the tag names
+	row := w.db.QueryRow("SELECT * FROM Wallpaper WHERE filename = ?", filename)
+	/*
+	if err != nil {
+		return Wallpaper{}, err
+	}
+	*/
+	var tags []string
+	var tagIDs []int
+	var md5 string
+	var wallpaperID int
+	row.Scan(&wallpaperID, &filename, &md5)
 	
+	// Get list of tag IDs from IsTagged
+	var currentID int
+	rows, err := w.db.Query("SELECT tag FROM IsTagged WHERE wallpaper = ?", wallpaperID)
+	if err != nil {
+		return Wallpaper{}, err
+	}
+	for rows.Next() {
+		rows.Scan(&currentID)
+		tagIDs = append(tagIDs, currentID)
+	}
+	
+	// Turn tag IDs into tag names
+	for _, tagID := range(tagIDs) {
+		row := w.db.QueryRow("SELECT tag FROM Tag WHERE ID = ?", tagID)
+		/*
+		if err != nil {
+			return Wallpaper{}, err
+		}
+		*/
+		var currentTag string
+		row.Scan(&currentTag)
+		tags = append(tags, currentTag)
+	}
+	return NewWP(filename, tags), nil
 }
