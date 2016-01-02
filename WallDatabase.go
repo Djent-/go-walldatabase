@@ -111,8 +111,7 @@ func exists(path string) (bool, error) {
 	return true, err
 }
 
-func WallDatabase Get(tag string) Wallpapers {
-	// Print to stdout all wallpapers corresponding to a tag line by line
+func (w WallDatabase) Get(tag string) Wallpapers {
 	getStmt := `
 	SELECT Wallpaper.filename
 		FROM Wallpaper, IsTagged, Tag
@@ -120,7 +119,7 @@ func WallDatabase Get(tag string) Wallpapers {
 		AND Tag.ID = IsTagged.tag
 		AND Tag.tag = ?
 	`
-	rows, err := db.Query(getStmt, tag)
+	rows, err := w.Query(getStmt, tag)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -140,7 +139,7 @@ func WallDatabase Get(tag string) Wallpapers {
 	return returnedWallpapers
 }
 
-func WallDatabase Add(wp Wallpaper) error {
+func (w WallDatabase) Add(wp Wallpaper) error {
 	// check whether given wallpaper exists on disk
 	// this is done in Wallpaper.Set() but I feel I should do it again
 	if ex, _ := exists(wp.filename); !ex {
@@ -159,7 +158,7 @@ func WallDatabase Add(wp Wallpaper) error {
 		*/
 	var found string
 	//This line querys the database, setting found to the md5 hash
-	err = db.QueryRow("SELECT md5 FROM Wallpaper WHERE md5 = ?", wp.md5).Scan(&found)
+	err = w.QueryRow("SELECT md5 FROM Wallpaper WHERE md5 = ?", wp.md5).Scan(&found)
 	switch {
 		case err == sql.ErrNoRows:
 			break
@@ -170,28 +169,29 @@ func WallDatabase Add(wp Wallpaper) error {
 	}
 	
 	// Add file to database
-	db.Exec("INSERT INTO Wallpaper VALUES(NULL, ?, ?)", wallpaper.filename, md5hash)
+	w.Exec("INSERT INTO Wallpaper VALUES(NULL, ?, ?)", wallpaper.filename, md5hash)
 	var wallpaperID int
-	db.QueryRow("SELECT ID FROM Wallpaper WHERE md5 = ?", md5hash).Scan(&wallpaperID)
+	w.QueryRow("SELECT ID FROM Wallpaper WHERE md5 = ?", md5hash).Scan(&wallpaperID)
 	
 	// Add tags to database
 	for _, tag := range(wp.tags) {
 		// check if tag exists in database
 		var tagID int
-		err := db.QueryRow("SELECT ID FROM Tag WHERE tag = ?", tag).Scan(&tagID)
+		err := w.QueryRow("SELECT ID FROM Tag WHERE tag = ?", tag).Scan(&tagID)
 		if err == sql.ErrNoRows {
 			// tag not found
 			// add tag to Tag
 			// get Tag.ID of added tag
-			db.Exec("INSERT INTO Tag VALUES(NULL, ?)", tag)
-			db.QueryRow("SELECT ID FROM Tag WHERE tag = ?", tag).Scan(&tagID)
+			w.Exec("INSERT INTO Tag VALUES(NULL, ?)", tag)
+			w.QueryRow("SELECT ID FROM Tag WHERE tag = ?", tag).Scan(&tagID)
 			log.Printf("Created tag '%s' with ID %d", tag, tagID)
 		} else if err != nil {
 			log.Fatal(err)
 		}
-		db.Exec("INSERT INTO IsTagged VALUES(?, ?)", wallpaperID, tagID)
+		w.Exec("INSERT INTO IsTagged VALUES(?, ?)", wallpaperID, tagID)
 		log.Printf("Tagged %s as '%s'", wp.filename, tag)
 	}
+	return nil
 }
 
 func NewWP(filename string, tags []string) Wallpaper {
@@ -218,4 +218,11 @@ func (w Wallpaper) Set(filename string, tags []string) {
 	// convert the md5 from [16]byte to string
 	md5hash := fmt.Sprintf("%x", md5.Sum(filedata))
 	w.md5 = md5hash
+}
+
+func (w WallDatabase) ReadWP(filename string) Wallpaper {
+	// Go into the Wallpaper table and SELECT *
+	// Go into the IsTagged table and get the Tag IDs associated
+	// Go into the Tag table and get the tag names
+	
 }
