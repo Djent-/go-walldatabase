@@ -82,12 +82,13 @@ func init() {
 func main() {
 	flag.Parse()
 	dbh := useDatabase()
-	dbh.Exec("DELETE FROM Wallpaper")
+	//dbh.Exec("DELETE FROM Wallpaper")
+	//dbh.Exec("DELETE FROM IsTagged")
 	switch {
 		case addf.wallpaperfilename != "":
 			addWallpaper(dbh)
 		case *getf != "":
-			getWallpaper(dbh)
+			getWallpapers(dbh)
 	}
 	
 }
@@ -176,8 +177,30 @@ func exists(path string) (bool, error) {
 	return true, err
 }
 
-func getWallpaper(db *sql.DB) {
-
+func getWallpapers(db *sql.DB) {
+	// Print to stdout all wallpapers corresponding to a tag line by line
+	getStmt := `
+	SELECT Wallpaper.filename
+										FROM Wallpaper, IsTagged, Tag
+										WHERE Wallpaper.ID = IsTagged.wallpaper
+										AND Tag.ID = IsTagged.tag
+										AND Tag.tag = ?
+	`
+	rows, err := db.Query(getStmt, getf)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var filename string
+		if err := rows.Scan(&filename); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(filename)
+	}
+	if err := rows.Err(); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func addWallpaper(db *sql.DB) {
@@ -238,19 +261,19 @@ func addWallpaper(db *sql.DB) {
 	for _, tag := range(addf.tags) {
 		// check if tag exists in database
 		var tagID int
-		err := db.QueryRow("SELECT tag FROM Tag WHERE tag = ?", tag).Scan(&tagID)
+		err := db.QueryRow("SELECT ID FROM Tag WHERE tag = ?", tag).Scan(&tagID)
 		if err == sql.ErrNoRows {
 			// tag not found
 			// add tag to Tag
 			// get Tag.ID of added tag
 			db.Exec("INSERT INTO Tag VALUES(NULL, ?)", tag)
 			db.QueryRow("SELECT ID FROM Tag WHERE tag = ?", tag).Scan(&tagID)
-			log.Printf("Created tag %s with ID %d", tag, tagID)
+			log.Printf("Created tag '%s' with ID %d", tag, tagID)
 		} else if err != nil {
 			log.Fatal(err)
 		}
 		db.Exec("INSERT INTO IsTagged VALUES(?, ?)", wallpaperID, tagID)
-		log.Printf("Tagged " + addf.wallpaperfilename + " as " + tag)
+		log.Printf("Tagged %s as '%s'", addf.wallpaperfilename, tag)
 	}
 }
 
