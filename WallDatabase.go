@@ -181,10 +181,10 @@ func getWallpapers(db *sql.DB) {
 	// Print to stdout all wallpapers corresponding to a tag line by line
 	getStmt := `
 	SELECT Wallpaper.filename
-										FROM Wallpaper, IsTagged, Tag
-										WHERE Wallpaper.ID = IsTagged.wallpaper
-										AND Tag.ID = IsTagged.tag
-										AND Tag.tag = ?
+		FROM Wallpaper, IsTagged, Tag
+		WHERE Wallpaper.ID = IsTagged.wallpaper
+		AND Tag.ID = IsTagged.tag
+		AND Tag.tag = ?
 	`
 	rows, err := db.Query(getStmt, getf)
 	if err != nil {
