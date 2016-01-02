@@ -13,6 +13,7 @@ import (
   "strings"
   "database/sql"
   "crypto/md5"
+  "log"
 )
 
 // Command flag vars
@@ -80,7 +81,7 @@ func init() {
 func main() {
 	flag.Parse()
 	dbh := useDatabase()
-
+	dbh.Exec("DELETE FROM Wallpaper")
 	switch {
 		case addf.wallpaperfilename != "":
 			addWallpaper(dbh)
@@ -181,14 +182,13 @@ func getWallpaper(db *sql.DB) {
 func addWallpaper(db *sql.DB) {
 	// addf contains the userDefinition struct
 	// check whether given filename exists
-	useWallpaperDir := false
 	
 	if ex, _ := exists(addf.wallpaperfilename); !ex {
 		// check against wallpaperdirf as well
 		if ex, _ := exists(*wallpaperdirf + addf.wallpaperfilename); !ex {
 			panic("Cannot find wallpaper")
 		} else {
-			useWallpaperDir = true
+			addf.wallpaperfilename = *wallpaperdirf + addf.wallpaperfilename
 		}
 	}
 	
@@ -196,26 +196,63 @@ func addWallpaper(db *sql.DB) {
 	// ioutil.ReadFile returns []byte
 	var filedata []byte
 	var err error
-	if useWallpaperDir {
-		filedata, err = ioutil.ReadFile(*wallpaperdirf + addf.wallpaperfilename)
-		if err != nil { panic(err) }
-	} else {
-		filedata, err = ioutil.ReadFile(addf.wallpaperfilename)
-		if err != nil { panic(err) }
-	}
+	filedata, err = ioutil.ReadFile(addf.wallpaperfilename)
+	if err != nil { panic(err) }
 	
-	md5hash := md5.Sum(filedata)
-	fmt.Println(md5hash)
+	// convert the md5 from [16]byte to string
+	md5hash := fmt.Sprintf("%x", md5.Sum(filedata))
+	log.Printf("Hashed the wallpaper: " + md5hash)
 	
 	// Check whether the file is already in the database
+		/*
+			In WallDatabase.pl, I do this by:
+				quoting the wallpaper filename
+				searching the Wallpaper table for that string
+				if there are no results, file is new
+			In WallDatabase.go, I want to use the MD5 hash instead.
+			This will give me the option of updating the database
+			in case of file renames or moves.
+		*/
+	var found string
+	//This line querys the database, setting found to the md5 hash
+	err = db.QueryRow("SELECT md5 FROM Wallpaper WHERE md5 = ?", md5hash).Scan(&found)
+	switch {
+		case err == sql.ErrNoRows:
+			break
+		case err != nil:
+			log.Fatal(err)
+		default:
+			log.Fatal("Wallpaper already tracked. Use --edit.")
+	}
+	// debug
+	// log.Printf("Made it past the switch statement.")
 	
 	// Add file to database
+	db.Exec("INSERT INTO Wallpaper VALUES(NULL, ?, ?)", addf.wallpaperfilename, md5hash)
+	var wallpaperID int
+	db.QueryRow("SELECT ID FROM Wallpaper WHERE md5 = ?", md5hash).Scan(&wallpaperID)
+	log.Printf("WallpaperID: " + string(wallpaperID))
 	
 	// Add tags to database
-	
-	// Add relationship between wallpaper and tags to database
-	
-	
+	for _, tag := range(addf.tags) {
+		// check if tag exists in database
+		var tagID int
+		err := db.QueryRow("SELECT tag FROM Tag WHERE tag = ?", tag).Scan(&tagID)
+		switch {
+			case err == sql.ErrNoRows:
+				// tag not found
+				// add tag to Tag
+				// get Tag.ID of added tag
+				db.Exec("INSERT INTO Tag VALUES(NULL, ?)", tag)
+				db.QueryRow("SELECT ID FROM Tag WHERE tag = ?", tag).Scan(&tagID)
+			case err != nil:
+				log.Fatal(err)
+			default: 
+				break
+		}
+		db.Exec("INSERT INTO IsTagged VALUES(?, ?)", wallpaperID, tagID)
+		log.Printf("Tagged " + addf.wallpaperfilename + " as " + tag)
+	}
 }
 
 /*
@@ -225,4 +262,7 @@ We would just have to parse the command line info, make a struct,
 have it check whether it exists in the database. The struct would be able
 to add itself, check itself, update itself, etc. This would also allow
 for greater extensibility in retrieving and using retrieved wallpapers.
+We'd also be able to do wallpaper.SetCurrent() or something. The problem
+is, do I want to load every sql row as a struct, or just when I need to 
+do stuff with it?
 */
