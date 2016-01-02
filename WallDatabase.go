@@ -60,6 +60,7 @@ func (u *userDefinition) Set(value string) error {
 		return errors.New("userDefinition flag already set")
 	}
 	
+	// The value that actually gets passed to the flag is the filename
 	u.wallpaperfilename = value
 	
 	/* The following is not idiomatic, and I consider it a shortcoming
@@ -67,7 +68,6 @@ func (u *userDefinition) Set(value string) error {
 	   other command line libraries in other languages. */
 	// These are the trailing args
 	for _, elem := range flag.Args() {
-		// first element is the filename
 		u.tags = append(u.tags, elem)
 		log.Printf("Appended tag %s", elem)
 	}
