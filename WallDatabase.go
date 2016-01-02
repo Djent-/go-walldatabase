@@ -19,22 +19,20 @@ type Wallpaper struct {
 	tags []string
 }
 
+type Walldatabase *sql.DB
+
+/*
 type WallDatabase struct{
 	database *sql.DB
 	wallpapers Wallpapers
 }
+*/
 
 type Wallpapers []Wallpaper
 
-/*
-I don't think this is the best name for this function.
-It does return a new INSTANCE of the database, but it also
-creates an entirely new DATABASE if needed.
-Could possibly make both a New() and an Open()
-*/
-func New(dbfile string) WallDatabase {
+func OpenDB(dbfile string) WallDatabase {
 	if ex, _ := exists(*db); !ex {
-		createDatabase(dbfile)
+		NewDB(dbfile)
 	}
 	
 	db, err := sql.Open("sqlite3", dbfile)
@@ -45,9 +43,7 @@ func New(dbfile string) WallDatabase {
 	return db
 }
 
-func createDatabase(dbfile string) {
-	// I believe this creates the file on the disk
-	// as well as opening it
+func NewDB(dbfile string) {
 	db, err := sql.Open("sqlite3", dbfile)
 	if err != nil {
 		panic(err)
@@ -115,7 +111,7 @@ func exists(path string) (bool, error) {
 	return true, err
 }
 
-func WallDatabase getWallpapers(tag string) Wallpapers {
+func WallDatabase Get(tag string) Wallpapers {
 	// Print to stdout all wallpapers corresponding to a tag line by line
 	getStmt := `
 	SELECT Wallpaper.filename
@@ -135,10 +131,8 @@ func WallDatabase getWallpapers(tag string) Wallpapers {
 		if err := rows.Scan(&filename); err != nil {
 			log.Fatal(err)
 		}
-		/* I should remove the single quotes from the printed line,
-		   but that would currently break compatibility with Wallpaper.pl
-		   because of the way the regex is implemented. */
-		fmt.Append(returnedWallpapers, filename)
+		// TODO: remove single quotes from around filename
+		returnedWallpapers = append(returnedWallpapers, filename)
 	}
 	if err := rows.Err(); err != nil {
 		log.Fatal(err)
@@ -146,29 +140,12 @@ func WallDatabase getWallpapers(tag string) Wallpapers {
 	return returnedWallpapers
 }
 
-func addWallpaper(db *sql.DB) {
-	// addf contains the userDefinition struct
-	// check whether given filename exists
-	
-	if ex, _ := exists(addf.wallpaperfilename); !ex {
-		// check against wallpaperdirf as well
-		if ex, _ := exists(*wallpaperdirf + addf.wallpaperfilename); !ex {
-			panic(fmt.Sprintf("Cannot find wallpaper: %s%s", *wallpaperdirf, addf.wallpaperfilename))
-		} else {
-			addf.wallpaperfilename = *wallpaperdirf + addf.wallpaperfilename
-		}
+func WallDatabase Add(wp Wallpaper) error {
+	// check whether given wallpaper exists on disk
+	// this is done in Wallpaper.Set() but I feel I should do it again
+	if ex, _ := exists(wp.filename); !ex {
+		log.Fatal(fmt.Sprintf("Cannot find wallpaper: %s", wp.filename))
 	}
-	
-	// MD5 hash it
-	// ioutil.ReadFile returns []byte
-	var filedata []byte
-	var err error
-	filedata, err = ioutil.ReadFile(addf.wallpaperfilename)
-	if err != nil { panic(err) }
-	
-	// convert the md5 from [16]byte to string
-	md5hash := fmt.Sprintf("%x", md5.Sum(filedata))
-	log.Printf("Hashed the wallpaper: " + md5hash)
 	
 	// Check whether the file is already in the database
 		/*
@@ -182,26 +159,23 @@ func addWallpaper(db *sql.DB) {
 		*/
 	var found string
 	//This line querys the database, setting found to the md5 hash
-	err = db.QueryRow("SELECT md5 FROM Wallpaper WHERE md5 = ?", md5hash).Scan(&found)
+	err = db.QueryRow("SELECT md5 FROM Wallpaper WHERE md5 = ?", wp.md5).Scan(&found)
 	switch {
 		case err == sql.ErrNoRows:
 			break
 		case err != nil:
 			log.Fatal(err)
 		default:
-			log.Fatal("Wallpaper already tracked. Use --edit.")
+			return error.New("Wallpaper already tracked. Use Edit().")
 	}
-	// debug
-	// log.Printf("Made it past the switch statement.")
 	
 	// Add file to database
-	db.Exec("INSERT INTO Wallpaper VALUES(NULL, ?, ?)", addf.wallpaperfilename, md5hash)
+	db.Exec("INSERT INTO Wallpaper VALUES(NULL, ?, ?)", wallpaper.filename, md5hash)
 	var wallpaperID int
 	db.QueryRow("SELECT ID FROM Wallpaper WHERE md5 = ?", md5hash).Scan(&wallpaperID)
-	log.Printf("WallpaperID: %d", wallpaperID)
 	
 	// Add tags to database
-	for _, tag := range(addf.tags) {
+	for _, tag := range(wp.tags) {
 		// check if tag exists in database
 		var tagID int
 		err := db.QueryRow("SELECT ID FROM Tag WHERE tag = ?", tag).Scan(&tagID)
@@ -216,18 +190,32 @@ func addWallpaper(db *sql.DB) {
 			log.Fatal(err)
 		}
 		db.Exec("INSERT INTO IsTagged VALUES(?, ?)", wallpaperID, tagID)
-		log.Printf("Tagged %s as '%s'", addf.wallpaperfilename, tag)
+		log.Printf("Tagged %s as '%s'", wp.filename, tag)
 	}
 }
 
-/*
-Currently thinking abotu another possible place to implement structures.
-Imagine a wallpaper struct with methods to add themselves to the database.
-We would just have to parse the command line info, make a struct,
-have it check whether it exists in the database. The struct would be able
-to add itself, check itself, update itself, etc. This would also allow
-for greater extensibility in retrieving and using retrieved wallpapers.
-We'd also be able to do wallpaper.SetCurrent() or something. The problem
-is, do I want to load every sql row as a struct, or just when I need to 
-do stuff with it?
-*/
+func NewWP(filename string, tags []string) Wallpaper {
+	var wallpaper Wallpaper
+	wallpaper.Set(filename, tags)
+	return wallpaper
+}
+
+func (w Wallpaper) Set(filename string, tags []string) {
+	// check whether given filename exists
+	if ex, _ := exists(filename); !ex {
+		log.Fatal(fmt.Sprintf("Cannot find wallpaper: %s", filename))
+	}
+	w.filename = filename
+	w.tags = tags
+	
+	// MD5 hash it
+	// ioutil.ReadFile returns []byte
+	var filedata []byte
+	var err error
+	filedata, err = ioutil.ReadFile(wallpaper.filename)
+	if err != nil { panic(err) }
+	
+	// convert the md5 from [16]byte to string
+	md5hash := fmt.Sprintf("%x", md5.Sum(filedata))
+	w.md5 = md5hash
+}
