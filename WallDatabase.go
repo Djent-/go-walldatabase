@@ -267,7 +267,7 @@ func NewWP(filename string, tags []string) Wallpaper {
 }
 
 func (w Wallpaper) String() string {
-	return fmt.Sprintf("%s : %s", w.filename, strings.Join(w.tags, ", "))
+	return fmt.Sprintf("%s : %s", w.Filename, strings.Join(w.Tags, ", "))
 }
 
 func (w WallDatabase) ReadWP(filename string) (Wallpaper, error) {
