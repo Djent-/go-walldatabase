@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	wdb "github.com/djent-/go-walldatabase"
-	//"strings"
 )
 
 func main() {
@@ -16,5 +15,11 @@ func main() {
 	testget := testdb.Get("stars")
 	for _, wp := range(testget) {
 		fmt.Println(wp)
+	}
+	fmt.Println("")
+	wallpapers := testdb.FetchAllWallpapers()
+	//fmt.Printf("%s", wallpapers)
+	for _, wall := range(wallpapers) {
+		fmt.Println(wall.String())
 	}
 }

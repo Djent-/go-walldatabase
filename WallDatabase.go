@@ -23,13 +23,6 @@ type WallDatabase struct {
 	db *sql.DB
 }
 
-/*
-type WallDatabase struct{
-	database *sql.DB
-	wallpapers Wallpapers
-}
-*/
-
 type Wallpapers []Wallpaper
 
 func OpenDB(dbfile string) WallDatabase {
@@ -151,15 +144,6 @@ func (w WallDatabase) Add(wp Wallpaper) error {
 	}
 	
 	// Check whether the file is already in the database
-		/*
-			In WallDatabase.pl, I do this by:
-				quoting the wallpaper filename
-				searching the Wallpaper table for that string
-				if there are no results, file is new
-			In WallDatabase.go, I want to use the MD5 hash instead.
-			This will give me the option of updating the database
-			in case of file renames or moves.
-		*/
 	var found string
 	//This line querys the database, setting found to the md5 hash
 	err := w.db.QueryRow("SELECT md5 FROM Wallpaper WHERE md5 = ?", wp.md5).Scan(&found)
@@ -218,11 +202,17 @@ func (w WallDatabase) Remove(wp Wallpaper) error {
 		return errors.New("Wallpaper to be removed to does exist in database")
 	}
 	// Remove the wallpaper from the Wallpaper table
-	w.db.Exec("DELETE FROM Wallpaper WHERE md5 = ")
+	w.db.Exec("DELETE FROM Wallpaper WHERE md5 = ?", wp.md5)
 	// Remove associations between the wallpaper to be removed and any tags
-	deleteStmt
+	deleteStmt := `
+	DELETE FROM IsTagged WHERE wallpaper = ?
+	`
+	w.db.Exec(deleteStmt, wallpaperID)
 	// Remove tags whose only association was with the removed wallpaper
+	// TODO
 	
+	
+	return nil
 }
 
 /*
@@ -240,6 +230,23 @@ func (w WallDatabase) Update(oldWallpaper, newWallpaper Wallpaper) error {
 	
 	// Add new wallpaper
 	
+	return nil
+}
+
+func (w WallDatabase) FetchAllWallpapers() Wallpapers {
+	var wps Wallpapers
+	selectStmt := `
+	SELECT filename FROM Wallpaper
+	`
+	rows, _ := w.db.Query(selectStmt) // TODO proper error checking
+	for rows.Next() {
+		var filename string
+		rows.Scan(&filename)
+		wallpaper, _ := w.ReadWP(filename)
+		wps = append(wps, wallpaper)
+	}
+	rows.Close()
+	return wps
 }
 
 func NewWP(filename string, tags []string) Wallpaper {
@@ -268,11 +275,6 @@ func (w WallDatabase) ReadWP(filename string) (Wallpaper, error) {
 	// Go into the IsTagged table and get the Tag IDs associated
 	// Go into the Tag table and get the tag names
 	row := w.db.QueryRow("SELECT * FROM Wallpaper WHERE filename = ?", filename)
-	/*
-	if err != nil {
-		return Wallpaper{}, err
-	}
-	*/
 	var tags []string
 	var tagIDs []int
 	var md5 string
@@ -293,11 +295,6 @@ func (w WallDatabase) ReadWP(filename string) (Wallpaper, error) {
 	// Turn tag IDs into tag names
 	for _, tagID := range(tagIDs) {
 		row := w.db.QueryRow("SELECT tag FROM Tag WHERE ID = ?", tagID)
-		/*
-		if err != nil {
-			return Wallpaper{}, err
-		}
-		*/
 		var currentTag string
 		row.Scan(&currentTag)
 		tags = append(tags, currentTag)
