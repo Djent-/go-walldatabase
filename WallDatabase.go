@@ -14,9 +14,9 @@ import (
 )
 
 type Wallpaper struct {
-	filename string
-	md5 string
-	tags []string
+	Filename string
+	MD5 string
+	Tags []string
 }
 
 type WallDatabase struct {
@@ -139,14 +139,14 @@ func (w WallDatabase) Get(tag string) Wallpapers {
 func (w WallDatabase) Add(wp Wallpaper) error {
 	// check whether given wallpaper exists on disk
 	// this is done in Wallpaper.Set() but I feel I should do it again
-	if ex, _ := exists(wp.filename); !ex {
-		log.Fatal(fmt.Sprintf("Cannot find wallpaper: %s", wp.filename))
+	if ex, _ := exists(wp.Filename); !ex {
+		log.Fatal(fmt.Sprintf("Cannot find wallpaper: %s", wp.Filename))
 	}
 	
 	// Check whether the file is already in the database
 	var found string
 	//This line querys the database, setting found to the md5 hash
-	err := w.db.QueryRow("SELECT md5 FROM Wallpaper WHERE md5 = ?", wp.md5).Scan(&found)
+	err := w.db.QueryRow("SELECT md5 FROM Wallpaper WHERE md5 = ?", wp.MD5).Scan(&found)
 	switch {
 		case err == sql.ErrNoRows:
 			break
@@ -157,12 +157,12 @@ func (w WallDatabase) Add(wp Wallpaper) error {
 	}
 	
 	// Add file to database
-	w.db.Exec("INSERT INTO Wallpaper VALUES(NULL, ?, ?)", wp.filename, wp.md5)
+	w.db.Exec("INSERT INTO Wallpaper VALUES(NULL, ?, ?)", wp.Filename, wp.MD5)
 	var wallpaperID int
-	w.db.QueryRow("SELECT ID FROM Wallpaper WHERE md5 = ?", wp.md5).Scan(&wallpaperID)
+	w.db.QueryRow("SELECT ID FROM Wallpaper WHERE md5 = ?", wp.MD5).Scan(&wallpaperID)
 	
 	// Add tags to database
-	for _, tag := range(wp.tags) {
+	for _, tag := range(wp.Tags) {
 		// check if tag exists in database
 		var tagID int
 		err := w.db.QueryRow("SELECT ID FROM Tag WHERE tag = ?", tag).Scan(&tagID)
@@ -197,12 +197,12 @@ func (w WallDatabase) Remove(wp Wallpaper) error {
 	selectStmt := `
 	SELECT ID FROM Wallpaper WHERE md5 = ?
 	`
-	err := w.db.QueryRow(selectStmt, wp.md5).Scan(&wallpaperID)
+	err := w.db.QueryRow(selectStmt, wp.MD5).Scan(&wallpaperID)
 	if err != nil {
 		return errors.New("Wallpaper to be removed to does exist in database")
 	}
 	// Remove the wallpaper from the Wallpaper table
-	w.db.Exec("DELETE FROM Wallpaper WHERE md5 = ?", wp.md5)
+	w.db.Exec("DELETE FROM Wallpaper WHERE md5 = ?", wp.MD5)
 	// Remove associations between the wallpaper to be removed and any tags
 	deleteStmt := `
 	DELETE FROM IsTagged WHERE wallpaper = ?
@@ -263,7 +263,7 @@ func NewWP(filename string, tags []string) Wallpaper {
 	// convert the md5 from [16]byte to string
 	md5hash := fmt.Sprintf("%x", md5.Sum(filedata))
 	
-	return Wallpaper{ filename: filename, tags: tags, md5: md5hash}
+	return Wallpaper{ Filename: filename, Tags: tags, MD5: md5hash}
 }
 
 func (w Wallpaper) String() string {
