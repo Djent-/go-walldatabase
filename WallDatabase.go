@@ -256,6 +256,9 @@ func NewWP(filename string, tags []string) Wallpaper {
 	}
 	
 	// MD5 hash it
+	// remove single quotes. I don't know where they come from
+	filename = strings.TrimPrefix(filename, "'")
+	filename = strings.TrimSuffix(filename, "'")
 	// ioutil.ReadFile returns []byte, error
 	filedata, err := ioutil.ReadFile(filename)
 	if err != nil { panic(err) }
@@ -279,7 +282,8 @@ func (w WallDatabase) ReadWP(filename string) (Wallpaper, error) {
 	var tagIDs []int
 	var md5 string
 	var wallpaperID int
-	row.Scan(&wallpaperID, &filename, &md5)
+	var throwaway string
+	row.Scan(&wallpaperID, &throwaway, &md5)
 	
 	// Get list of tag IDs from IsTagged
 	var currentID int
