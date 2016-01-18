@@ -286,7 +286,10 @@ func (w WallDatabase) ReadWP(filename string) (Wallpaper, error) {
 	var md5 string
 	var wallpaperID int
 	var throwaway string
-	row.Scan(&wallpaperID, &throwaway, &md5)
+	err := row.Scan(&wallpaperID, &throwaway, &md5)
+	if err != nil {
+		return Wallpaper{}, err
+	}
 	
 	// Get list of tag IDs from IsTagged
 	var currentID int
