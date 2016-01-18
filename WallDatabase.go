@@ -233,12 +233,15 @@ func (w WallDatabase) Update(oldWallpaper, newWallpaper Wallpaper) error {
 	return nil
 }
 
-func (w WallDatabase) FetchAllWallpapers() Wallpapers {
+func (w WallDatabase) FetchAllWallpapers() (Wallpapers, error) {
 	var wps Wallpapers
 	selectStmt := `
 	SELECT filename FROM Wallpaper
 	`
-	rows, _ := w.db.Query(selectStmt) // TODO proper error checking
+	rows, err := w.db.Query(selectStmt)
+	if err != nil {
+		return Wallpapers{}, err
+	}
 	for rows.Next() {
 		var filename string
 		rows.Scan(&filename)
@@ -246,7 +249,7 @@ func (w WallDatabase) FetchAllWallpapers() Wallpapers {
 		wps = append(wps, wallpaper)
 	}
 	rows.Close()
-	return wps
+	return wps, nil
 }
 
 func NewWP(filename string, tags []string) Wallpaper {
