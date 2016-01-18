@@ -16,7 +16,7 @@ import (
 type Wallpaper struct {
 	Filename string
 	MD5 string
-	Tags []string
+	Tags *[]string
 }
 
 type WallDatabase struct {
@@ -162,7 +162,7 @@ func (w WallDatabase) Add(wp Wallpaper) error {
 	w.db.QueryRow("SELECT ID FROM Wallpaper WHERE md5 = ?", wp.MD5).Scan(&wallpaperID)
 	
 	// Add tags to database
-	for _, tag := range(wp.Tags) {
+	for _, tag := range(*wp.Tags) {
 		// check if tag exists in database
 		var tagID int
 		err := w.db.QueryRow("SELECT ID FROM Tag WHERE tag = ?", tag).Scan(&tagID)
@@ -269,11 +269,11 @@ func NewWP(filename string, tags []string) Wallpaper {
 	// convert the md5 from [16]byte to string
 	md5hash := fmt.Sprintf("%x", md5.Sum(filedata))
 	
-	return Wallpaper{ Filename: filename, Tags: tags, MD5: md5hash}
+	return Wallpaper{ Filename: filename, Tags: &tags, MD5: md5hash}
 }
 
 func (w Wallpaper) String() string {
-	return fmt.Sprintf("%s : %s", w.Filename, strings.Join(w.Tags, ", "))
+	return fmt.Sprintf("%s : %s", w.Filename, strings.Join(*w.Tags, ", "))
 }
 
 func (w WallDatabase) ReadWP(filename string) (Wallpaper, error) {
@@ -303,8 +303,12 @@ func (w WallDatabase) ReadWP(filename string) (Wallpaper, error) {
 	for _, tagID := range(tagIDs) {
 		row := w.db.QueryRow("SELECT tag FROM Tag WHERE ID = ?", tagID)
 		var currentTag string
-		row.Scan(&currentTag)
+		err := row.Scan(&currentTag)
+		if err != nil {
+			return Wallpaper{}, err
+		}
 		tags = append(tags, currentTag)
 	}
+	
 	return NewWP(filename, tags), nil
 }
